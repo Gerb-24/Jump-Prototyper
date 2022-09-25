@@ -1,0 +1,8 @@
+{
+  "mapname": "testing",
+  "vmf_list": [
+    "./vmfs\\testing\\jump_1.vmf",
+    "./vmfs\\testing\\jump_2.vmf",
+    "./vmfs\\testing\\jump_3.vmf"
+  ]
+}

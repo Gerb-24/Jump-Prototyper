@@ -1,0 +1,11 @@
+{
+  "ceiling_tex": "dev/reflectivity_70",
+  "corner_tex": "dev/reflectivity_10",
+  "floor_tex": "customdev/dev_measurewall01blu",
+  "search_tex": "tools/toolsskip",
+
+  "side_tex": "dev/dev_blendmeasure2",
+  "skip_tex": "customdev/dev_measurewall01red",
+  "shoot_tex": "dev/reflectivity_70",
+  "walk_tex": "orange_dev/dev_measurewall_green03"
+}
