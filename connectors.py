@@ -55,7 +55,7 @@ class edgeData:
         )
         return ed
 
-    def toWall( self ):
+    def toWall( self, textures ):
         proto = createDuplicateVMF(prototypeVMF)
         verts = BrushVertexManipulationBox( proto ).createVerticesInBoxDict().moveToZero()
 
@@ -76,9 +76,9 @@ class edgeData:
         solid = proto.get_solids()[0]
         for side in solid.get_sides():
             if side.material == sideDict[self.normal].upper():
-                side.material = side_tex
+                side.material = textures.side
             else:
-                side.material = nodraw.upper()
+                side.material = textures.nodraw.upper()
         return proto
 
 class cornerPoint:
@@ -90,7 +90,7 @@ class cornerPoint:
         else:
             self.n_x, self.n_y = n_2, n_1
 
-    def toCorner( self ):
+    def toCorner( self, textures ):
         proto = createDuplicateVMF(prototypeVMF)
         verts = BrushVertexManipulationBox( proto ).createVerticesInBoxDict().moveToZero()
 
@@ -107,15 +107,13 @@ class cornerPoint:
 
         solid = proto.get_solids()[0]
         for side in solid.get_sides():
-            if side.material == sideDict[self.n_x].upper() or side.material == sideDict[self.n_y].upper():
-                side.material = nodraw.upper()
-            elif side.material == sideDict['z'].upper() or side.material == sideDict['-z'].upper():
-                side.material = nodraw.upper()
+            if side.material in { sideDict[self.n_x].upper(), sideDict[self.n_y].upper(), sideDict['z'].upper(), sideDict['-z'].upper() }:
+                side.material = textures.nodraw.upper()
             else:
-                side.material = corner_tex.upper()
+                side.material = textures.corner.upper()
         return proto
 
-def solidToCeiling( solid: Solid, tot_z_max ):
+def solidToCeiling( solid: Solid, tot_z_max, textures ):
     proto = createDuplicateVMF(prototypeVMF)
     verts = BrushVertexManipulationBox( proto ).createVerticesInBoxDict().moveToZero()
 
@@ -126,12 +124,12 @@ def solidToCeiling( solid: Solid, tot_z_max ):
     solid = proto.get_solids()[0]
     for side in solid.get_sides():
         if side.material == sideDict['-z'].upper():
-            side.material = ceiling_tex.upper()
+            side.material = textures.ceiling.upper()
         else:
-            side.material = nodraw.upper()
+            side.material = textures.nodraw.upper()
     return proto
 
-def solidToFloor( solid: Solid, tot_z_min, filename ):
+def solidToFloor( solid: Solid, tot_z_min, filename, textures ):
     proto = createDuplicateVMF(prototypeVMF)
     verts = BrushVertexManipulationBox( proto ).createVerticesInBoxDict().moveToZero()
 
@@ -142,9 +140,9 @@ def solidToFloor( solid: Solid, tot_z_min, filename ):
     solid = proto.get_solids()[0]
     for side in solid.get_sides():
         if side.material == sideDict['z'].upper():
-            side.material = floor_tex.upper()
+            side.material = textures.floor.upper()
         else:
-            side.material = nodraw.upper()
+            side.material = textures.nodraw.upper()
 
     proto2 = createDuplicateVMF(prototypeVMF)
     verts = BrushVertexManipulationBox( proto2 ).createVerticesInBoxDict().moveToZero()
@@ -156,7 +154,7 @@ def solidToFloor( solid: Solid, tot_z_min, filename ):
 
     solid = proto2.get_solids()[0]
     for side in solid.get_sides():
-        side.material = trigger_tex.upper()
+        side.material = textures.trigger.upper()
     target = os.path.splitext(os.path.basename(filename))[0]
 
     tele_dic = {
@@ -167,9 +165,6 @@ def solidToFloor( solid: Solid, tot_z_min, filename ):
     tele_ent = Entity(dic=tele_dic)
     tele_ent.solids.append( solid )
 
-    # solid = proto3.get_solids()[0]
-    # for side in solid.get_sides():
-    #     side.material = trigger_tex.upper()
     _solid = solid.copy()
     cata_dic = {
         'classname':    'trigger_catapult',
@@ -207,10 +202,10 @@ def getEdgeDataOfSolid( solid: Solid ):
     solid_data = [ solid_ed_dict[key] for key in solid_ed_dict ]
     return solid_data
 
-def generate_connectors( filename ):
+def generate_connectors( filename, textures ):
     dummyVMF = new_vmf()
     testVMF = createDuplicateVMF(load_vmf(filename))
-    solids = [solid for solid in testVMF.get_solids() if solid.has_texture(search_tex)]
+    solids = [solid for solid in testVMF.get_solids() if solid.has_texture(textures.search)]
     dim_tuple = getMaxDimensionsOfList(solids)
     edgeDataList = []
 

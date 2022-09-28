@@ -32,33 +32,90 @@ direction_dict = {
                     'o':    'y',
                     },
                 }
-sideTextures = [f"dev/reflectivity_{10*(i+1)}" for i in range(6)]
-sideDict = {
-    "x": sideTextures[0],
-    "y": sideTextures[1],
-    "z": sideTextures[2],
-    "-x": sideTextures[3],
-    "-y": sideTextures[4],
-    "-z": sideTextures[5],
-}
 
-with open("texture_settings.json", "r") as f:
-    tex_dict = json.loads(f.read())
-''' connectors textures '''
-ceiling_tex = tex_dict['ceiling_tex']
-corner_tex = tex_dict['corner_tex']
-floor_tex = tex_dict['floor_tex']
-search_tex = tex_dict['search_tex']
+class Textures:
+    def __init__( self ):
+        '''side textures'''
+        self.x = 'dev/reflectivity_10'.upper()
+        self.y = 'dev/reflectivity_20'.upper()
+        self.z = 'dev/reflectivity_30'.upper()
+        self.neg_x = 'dev/reflectivity_40'.upper()
+        self.neg_y = 'dev/reflectivity_50'.upper()
+        self.neg_z = 'dev/reflectivity_60'.upper()
 
-''' jump textures '''
-side_tex = tex_dict['side_tex']
-skip_tex = tex_dict['skip_tex']
-shoot_tex = tex_dict['shoot_tex']
-walk_tex = tex_dict['walk_tex']
+        '''default textures'''
+        self.nodraw = 'tools/toolsnodraw'.upper()
+        self.trigger = 'tools/toolstrigger'.upper()
+        self.black = 'tools/toolsblack'.upper()
 
-nodraw = 'tools/toolsnodraw'
-trigger_tex = 'tools/toolstrigger'
-black_tex = 'tools/toolsblack'
+        ''' jump textures '''
+        self.side = ''  # used for nonaded surfaces
+        self.skip = ''  # used for surfaces with a tele
+        self.shoot = '' # used for wallshots
+        self.walk = ''  # used for places you can land on
+
+        ''' connectors textures '''
+        self.ceiling = ''   # the texture for the ceiling
+        self.corner = ''    # the texture for a corner
+        self.floor = ''     # the texture for a teled floor
+        self.search = ''    # the texture to search for when building connectors
+
+    def load_textures( self ):
+        with open("texture_settings.json", "r") as f:
+            tex_dict = json.loads(f.read())
+
+        self.side = tex_dict['side'].upper()
+        self.skip = tex_dict['skip'].upper()
+        self.shoot = tex_dict['shoot'].upper()
+        self.walk = tex_dict['walk'].upper()
+
+        self.ceiling = tex_dict['ceiling'].upper()
+        self.corner = tex_dict['corner'].upper()
+        self.floor = tex_dict['floor'].upper()
+        self.search = tex_dict['search'].upper()
+
+        return self
+
+    def to_side( self, s ):
+        side_dict = {
+            "x": self.x,
+            "y": self.y,
+            "z": self.z,
+            "-x": self.neg_x,
+            "-y": self.neg_y,
+            "-z": self.neg_z,
+        }
+
+        return side_dict[ s ]
+
+    def to_sides( self, *args ):
+        return { self.to_side(s) for s in args }
+
+    def to_key( self, side ):
+        key_dict = {
+            self.x:         'x',
+            self.y:         'y',
+            self.z:         'z',
+            self.neg_x:     '-x',
+            self.neg_y:     '-y',
+            self.neg_z:     '-z',
+        }
+        return key_dict[ side ]
+
+    def mat_to_dic( self, proto, mat_dic ):
+        solid = proto.get_solids()[0]
+        pre_mat_dic = {
+            "x":    self.nodraw,
+            "y":    self.nodraw,
+            "z":    self.nodraw,
+            "-x":   self.nodraw,
+            "-y":   self.nodraw,
+            "-z":   self.nodraw,
+        }
+        for key in mat_dic:
+            pre_mat_dic[key] = mat_dic[key]
+        for side in solid.get_sides():
+            side.material = pre_mat_dic[ self.to_key( side.material ) ]
 
 class VertexManipulationBox:
     def __init__( self, xMin, xMax, yMin, yMax, zMin, zMax ):
@@ -139,6 +196,11 @@ class VerticesToManipulate:
             for vertex in self.verticesDict[ direction ]:
                 vertex.move( *moveDict[ direction ] )
 
+    def move_to_dic( self, move_dic ):
+        for key in move_dic:
+            for vertex in self.verticesDict[ key ]:
+                vertex.move( *self.getMove( key, move_dic[ key ] ))
+
     def moveToZero( self ):
         for direction in self.verticesDict:
             for vertex in self.verticesDict[ direction ]:
@@ -151,25 +213,21 @@ class VerticesToManipulate:
 class Platform:
     def  __init__( self, type ):
         self.type = type # ss or sk or rs
-    def create( self, dir, coord ):
+    def create( self, dir, coord, textures ):
         proto = createDuplicateVMF(prototypeVMF)
         verts = BrushVertexManipulationBox( proto ).createVerticesInBoxDict().moveToZero()
         verts.translate( *coord, 0 )
         dir_r, dir_l, dir_opp = direction_dict[ dir ][ 'l' ], direction_dict[ dir ][ 'r' ], direction_dict[ dir ][ 'o' ]
-        for vertex in verts.verticesDict[ dir_r ]:
-            vertex.move( *verts.getMove( dir_r, 2*128 ))
-        for vertex in verts.verticesDict[ dir_l ]:
-            vertex.move( *verts.getMove( dir_l, 2*128 ))
+        move_dic = {
+            dir_r:      2*128,
+            dir_l:      2*128,
+            dir:        6*128,
+            dir_opp:    -2*128,
+            'z':        2*128,
+            '-z':       2*128
+        }
 
-        for vertex in verts.verticesDict[ dir ]:
-            vertex.move( *verts.getMove( dir, 6*128 ))
-        for vertex in verts.verticesDict[ dir_opp ]:
-            vertex.move( *verts.getMove( dir_opp, -2*128 ))
-
-        for vertex in verts.verticesDict[ 'z' ]:
-            vertex.move( *verts.getMove( 'z', 2*128 ))
-        for vertex in verts.verticesDict[ '-z' ]:
-            vertex.move( *verts.getMove( '-z', 2*128 ))
+        verts.move_to_dic( move_dic )
 
         if self.type == 'rs':
             for vertex in verts.verticesDict[ dir ]:
@@ -179,18 +237,20 @@ class Platform:
         c_1, c_2, _ = verts.getMove( dir, 8*128 )
         coord = ( coord[0]+c_1, coord[1]+c_2 )
 
-        solid = proto.get_solids()[0]
 
-        for side in solid.get_sides():
-            if side.material == sideDict[ 'z' ].upper():
-                if self.type in { 'ss', 'rs' }:
-                    side.material = walk_tex.upper()
-                else:
-                    side.material = skip_tex.upper()
-            elif side.material == sideDict[ '-z' ].upper():
-                side.material = nodraw.upper()
-            else:
-                side.material = side_tex.upper()
+        mat_dic = {
+            dir_r:      textures.side,
+            dir_l:      textures.side,
+            dir:        textures.side,
+            dir_opp:    textures.side
+        }
+
+        if self.type in { 'ss', 'rs' }:
+            mat_dic[ 'z' ] = textures.walk
+        else:
+            mat_dic[ 'z' ] = textures.skip
+
+        textures.mat_to_dic( proto, mat_dic )
 
         return proto, coord
 
@@ -198,47 +258,41 @@ class Wallshot:
     def  __init__( self, l_or_r ):
         self.l_or_r = l_or_r        # left or right
 
-    def create( self, dir, coord ):
+    def create( self, dir, coord, textures ):
         proto = createDuplicateVMF(prototypeVMF)
         verts = BrushVertexManipulationBox( proto ).createVerticesInBoxDict().moveToZero()
         verts.translate( *coord, 0 )
         n = direction_dict[ dir ][ self.l_or_r ]
         n_opp = direction_dict[ n ][ 'o' ]
         dir_opp = direction_dict[ dir ][ 'o' ]
-        for vertex in verts.verticesDict[ n ]:
-            vertex.move( *verts.getMove( n, -128 ))
-        for vertex in verts.verticesDict[ n_opp ]:
-            vertex.move( *verts.getMove( n_opp, 3*128 ))
 
-        for vertex in verts.verticesDict[ 'z' ]:
-            vertex.move( *verts.getMove( 'z', 10*128 ))
-        for vertex in verts.verticesDict[ '-z' ]:
-            vertex.move( *verts.getMove( '-z', 2*128 ))
-
-        for vertex in verts.verticesDict[ dir ]:
-            vertex.move( *verts.getMove( dir, 6*128 ))
-
-        for vertex in verts.verticesDict[ dir_opp ]:
-            vertex.move( *verts.getMove( dir_opp, -2*128 ))
+        move_dic = {
+            n: -1*128,
+            n_opp: 3*128,
+            dir: 6*128,
+            dir_opp: -2*128,
+            'z': 10*128,
+            '-z': 2*128
+        }
+        verts.move_to_dic( move_dic )
 
         c_1, c_2, _ = verts.getMove( dir, 8*128 )
         coord = ( coord[0]+c_1, coord[1]+c_2 )
 
-        solid = proto.get_solids()[0]
-        for side in solid.get_sides():
-            if side.material == sideDict[dir].upper() or side.material == sideDict[dir_opp].upper():
-                side.material = side_tex.upper()
-            elif side.material == sideDict[ n ].upper():
-                side.material = shoot_tex.upper()
-            else:
-                side.material = nodraw.upper()
+        mat_dic = {
+            n:          textures.shoot,
+            dir:        textures.side,
+            dir_opp:    textures.side,
+        }
+
+        textures.mat_to_dic( proto, mat_dic )
 
         return proto, coord
 
 class Jurf:
     def  __init__( self, l_or_r ):
         self.l_or_r = l_or_r        # left or right
-    def create( self, dir, coord ):
+    def create( self, dir, coord, textures ):
         proto = createDuplicateVMF(prototypeVMF)
         verts = BrushVertexManipulationBox( proto ).createVerticesInBoxDict().moveToZero()
         verts.translate( *coord, 0 )
@@ -251,62 +305,50 @@ class Jurf:
         n_opp = direction_dict[ n ][ 'o' ]
         dir_opp = direction_dict[ dir ][ 'o' ]
 
-        # here we move the jurf
-        for vertex in verts.verticesDict[ n ]:
-            vertex.move( *verts.getMove( n, 128 ))
-        for vertex in verts.verticesDict[ n_opp ]:
-            vertex.move( *verts.getMove( n_opp, 2*128 ))
+        move_dic = {
+            n: 128,
+            n_opp: 2*128,
+            dir: 6*128,
+            dir_opp: -2*128,
+            'z': 2*128,
+            '-z': 2*128
+        }
 
-        for vertex in verts.verticesDict[ 'z' ]:
-            vertex.move( *verts.getMove( 'z', 2*128 ))
-        for vertex in verts.verticesDict[ '-z' ]:
-            vertex.move( *verts.getMove( '-z', 2*128 ))
+        move_dic2 = {
+            n: -2*128,
+            n_opp: 3*128,
+            dir: 6*128,
+            dir_opp: -2*128,
+            'z': 5*128+8,
+            '-z': 2*128
+        }
 
-        for vertex in verts.verticesDict[ dir ]:
-            vertex.move( *verts.getMove( dir, 6*128 ))
-
-        for vertex in verts.verticesDict[ dir_opp ]:
-            vertex.move( *verts.getMove( dir_opp, -2*128 ))
+        verts.move_to_dic( move_dic )
+        verts2.move_to_dic( move_dic2 )
 
         for vertex in verts.verticesDict[ n_opp ]:
             if vertex in verts.verticesDict[ 'z' ]:
                 vertex.move( *verts.getMove( 'z', 3*128+8 ))
 
-        # here we move the sidewall
-        for vertex in verts2.verticesDict[ n ]:
-            vertex.move( *verts2.getMove( n, -2*128 ))
-        for vertex in verts2.verticesDict[ n_opp ]:
-            vertex.move( *verts2.getMove( n_opp, 3*128 ))
-
-        for vertex in verts2.verticesDict[ 'z' ]:
-            vertex.move( *verts2.getMove( 'z', 5*128+8 ))
-        for vertex in verts2.verticesDict[ '-z' ]:
-            vertex.move( *verts2.getMove( '-z', 2*128 ))
-
-        for vertex in verts2.verticesDict[ dir ]:
-            vertex.move( *verts2.getMove( dir, 6*128 ))
-
-        for vertex in verts2.verticesDict[ dir_opp ]:
-            vertex.move( *verts2.getMove( dir_opp, -2*128 ))
-
         c_1, c_2, _ = verts.getMove( dir, 8*128 )
         coord = ( coord[0]+c_1, coord[1]+c_2 )
 
-        solid = proto.get_solids()[0]
-        for side in solid.get_sides():
-            if side.material == sideDict['z'].upper():
-                side.material = walk_tex.upper()
-            elif side.material in { sideDict[ n_opp ].upper(), sideDict[ '-z' ].upper() }:
-                side.material = nodraw.upper()
-            else:
-                side.material = side_tex.upper()
+        mat_dic = {
+            'z':        textures.walk,
+            dir:        textures.side,
+            dir_opp:    textures.side,
+            n:          textures.side,
+        }
 
-        solid = proto2.get_solids()[0]
-        for side in solid.get_sides():
-            if side.material in {sideDict['-z'].upper(), sideDict[ n ].upper() , sideDict[n_opp].upper() } :
-                side.material = nodraw.upper()
-            else:
-                side.material = side_tex.upper()
+        textures.mat_to_dic( proto, mat_dic )
+
+        mat_dic2 = {
+            'z':        textures.skip,
+            dir:        textures.side,
+            dir_opp:    textures.side,
+        }
+
+        textures.mat_to_dic( proto2, mat_dic2 )
 
 
         proto = addVMF( proto, proto2 )
@@ -314,32 +356,26 @@ class Jurf:
         return proto, coord
 
 class Start:
-    def create( self, cur ):
+    def create( self, cur, textures ):
         proto = createDuplicateVMF(prototypeVMF)
         verts = BrushVertexManipulationBox( proto ).createVerticesInBoxDict().moveToZero()
         verts.full_move( 3*128, 0 , 0, -3*128, -4*128, -2*128 )
 
-        solid = proto.get_solids()[0]
-        for side in solid.get_sides():
-            if side.material == sideDict[ 'z' ].upper():
-                side.material = walk_tex.upper()
-            elif side.material == sideDict[ 'y' ].upper():
-                side.material = side_tex.upper()
-            else:
-                side.material = nodraw.upper()
+        mat_dic = {
+            'z':    textures.walk,
+            'y':    textures.side,
+        }
+        textures.mat_to_dic( proto, mat_dic )
 
         proto2 = createDuplicateVMF(prototypeVMF)
         verts = BrushVertexManipulationBox( proto2 ).createVerticesInBoxDict().moveToZero()
         verts.full_move( 3*128, 0 , 10*128, 128, -4*128, 0 )
 
-        solid = proto2.get_solids()[0]
-        for side in solid.get_sides():
-            if side.material == sideDict['y'].upper():
-                side.material = side_tex.upper()
-            elif side.material == sideDict[ '-x' ].upper():
-                side.material = shoot_tex.upper()
-            else:
-                side.material = nodraw.upper()
+        mat_dic2 = {
+            '-x':    textures.shoot,
+            'y':    textures.side,
+        }
+        textures.mat_to_dic( proto2, mat_dic2 )
 
         proto = addVMF( proto, proto2 )
 
@@ -356,36 +392,29 @@ class Start:
         return proto
 
 class End:
-    def create( self, dir, coord, next ):
+    def create( self, dir, coord, next, textures ):
         def create_plat():
             proto = createDuplicateVMF(prototypeVMF)
             verts = BrushVertexManipulationBox( proto ).createVerticesInBoxDict().moveToZero()
             verts.translate( *coord, 0 )
             dir_r, dir_l, dir_opp = direction_dict[ dir ][ 'l' ], direction_dict[ dir ][ 'r' ], direction_dict[ dir ][ 'o' ]
-            for vertex in verts.verticesDict[ dir_r ]:
-                vertex.move( *verts.getMove( dir_r, 3*128 ))
-            for vertex in verts.verticesDict[ dir_l ]:
-                vertex.move( *verts.getMove( dir_l, 3*128 ))
+            move_dic = {
+                dir_r:      3*128,
+                dir_l:      3*128,
+                dir:        26*128,
+                dir_opp:    -20*128,
+                'z':        0,
+                '-z':       2*128,
+            }
 
-            for vertex in verts.verticesDict[ dir ]:
-                vertex.move( *verts.getMove( dir, 26*128 ))
-            for vertex in verts.verticesDict[ dir_opp ]:
-                vertex.move( *verts.getMove( dir_opp, -20*128 ))
+            verts.move_to_dic( move_dic )
 
-            for vertex in verts.verticesDict[ 'z' ]:
-                vertex.move( *verts.getMove( 'z', 0))
-            for vertex in verts.verticesDict[ '-z' ]:
-                vertex.move( *verts.getMove( '-z', 2*128 ))
+            mat_dic = {
+                'z':        textures.walk,
+                dir_opp:    textures.side
+            }
+            textures.mat_to_dic( proto, mat_dic )
 
-
-            solid = proto.get_solids()[0]
-            for side in solid.get_sides():
-                if side.material == sideDict[ 'z' ].upper():
-                    side.material = walk_tex.upper()
-                elif side.material == sideDict[ dir_opp ].upper():
-                    side.material = side_tex.upper()
-                else:
-                    side.material = nodraw.upper()
             return proto
 
         def create_tele_door():
@@ -393,28 +422,22 @@ class End:
             verts = BrushVertexManipulationBox( proto ).createVerticesInBoxDict().moveToZero()
             verts.translate( *coord, 0 )
             dir_r, dir_l, dir_opp = direction_dict[ dir ][ 'l' ], direction_dict[ dir ][ 'r' ], direction_dict[ dir ][ 'o' ]
-            for vertex in verts.verticesDict[ dir_r ]:
-                vertex.move( *verts.getMove( dir_r, 0.5*128 ))
-            for vertex in verts.verticesDict[ dir_l ]:
-                vertex.move( *verts.getMove( dir_l, 0.5*128 ))
-
-            for vertex in verts.verticesDict[ dir ]:
-                vertex.move( *verts.getMove( dir, 26*128 ))
-            for vertex in verts.verticesDict[ dir_opp ]:
-                vertex.move( *verts.getMove( dir_opp, -26*128+32 ))
-
-            for vertex in verts.verticesDict[ 'z' ]:
-                vertex.move( *verts.getMove( 'z', 1.5*128))
-            for vertex in verts.verticesDict[ '-z' ]:
-                vertex.move( *verts.getMove( '-z', 0 ))
-
+            move_dic = {
+                dir_r:     0.5*128,
+                dir_l:      0.5*128,
+                dir:        26*128,
+                dir_opp:    -26*128+32,
+                'z':        1.5*128,
+                '-z':       0,
+            }
+            verts.move_to_dic( move_dic )
 
             solid = proto.get_solids()[0]
             for side in solid.get_sides():
-                if side.material in {sideDict[ dir ].upper(), sideDict[ '-z' ].upper()}:
-                    side.material = nodraw.upper()
+                if side.material in textures.to_sides( dir, '-z' ):
+                    side.material = textures.nodraw
                 else:
-                    side.material = black_tex.upper()
+                    side.material = textures.black
 
 
             return proto
@@ -424,31 +447,18 @@ class End:
             verts = BrushVertexManipulationBox( proto ).createVerticesInBoxDict().moveToZero()
             verts.translate( *coord, 0 )
             dir_r, dir_l, dir_opp = direction_dict[ dir ][ 'l' ], direction_dict[ dir ][ 'r' ], direction_dict[ dir ][ 'o' ]
-            for vertex in verts.verticesDict[ dir_r ]:
-                vertex.move( *verts.getMove( dir_r, 0.5*128 ))
-            for vertex in verts.verticesDict[ dir_l ]:
-                vertex.move( *verts.getMove( dir_l, 0.5*128 ))
-
-            for vertex in verts.verticesDict[ dir ]:
-                vertex.move( *verts.getMove( dir, 26*128 ))
-            for vertex in verts.verticesDict[ dir_opp ]:
-                vertex.move( *verts.getMove( dir_opp, -26*128+32 ))
-
-            for vertex in verts.verticesDict[ 'z' ]:
-                vertex.move( *verts.getMove( 'z', 1.5*128))
-            for vertex in verts.verticesDict[ '-z' ]:
-                vertex.move( *verts.getMove( '-z', 0 ))
-            for vertex in verts.verticesDict[ 'z' ]:
-                vertex.move( *verts.getMove( 'z', 8))
-            for vertex in verts.verticesDict[ dir_r ]:
-                vertex.move( *verts.getMove( dir_r, 8 ))
-            for vertex in verts.verticesDict[ dir_l ]:
-                vertex.move( *verts.getMove( dir_l, 8 ))
-            for vertex in verts.verticesDict[ dir_opp ]:
-                vertex.move( *verts.getMove( dir_opp, 8 ))
+            move_dic = {
+                dir_r:     0.5*128+8,
+                dir_l:      0.5*128+8,
+                dir:        26*128,
+                dir_opp:    -26*128+32+8,
+                'z':        1.5*128+8,
+                '-z':       0,
+            }
+            verts.move_to_dic( move_dic )
 
             solid = proto.get_solids()[0]
-            solid.set_texture( trigger_tex )
+            solid.set_texture( textures.trigger )
 
             tele_dic = {
                 'classname':    'trigger_teleport',
@@ -470,7 +480,7 @@ class End:
         return tot_proto
 
 class Connectors:
-    def create( self, strafes, directions ):
+    def create( self, strafes, directions, textures ):
         coord = ( 0, 0 )
         proto_list = []
         verts_list = []
@@ -501,7 +511,7 @@ class Connectors:
 
                 solid = proto.get_solids()[0]
                 for side in solid.get_sides():
-                    side.material = search_tex.upper()
+                    side.material = textures.search
                 proto_list.append( proto )
                 verts_list.append( verts )
 
@@ -540,7 +550,7 @@ class Connectors:
         return tot_proto
 
 class Triggers:
-    def create( self, vmf ):
+    def create( self, vmf, textures ):
         solids = vmf.get_solids()
         xMin, xMax, yMin, yMax, zMin, zMax = getMaxDimensionsOfList( solids )
 
@@ -552,7 +562,7 @@ class Triggers:
                 vertex.move( *verts.getMove( direction, 4*128 ) )
 
         solid = proto.get_solids()[0]
-        solid.set_texture( trigger_tex )
+        solid.set_texture( textures.trigger )
 
         regen_dic = {
             'classname':    'func_regenerate',

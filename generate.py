@@ -28,22 +28,24 @@ def strafes_to_directions( strafes ):
     return directions
 
 def jump_generator( jumps, strafes, mapname, dirname, cur, next ):
+
     jumps_as_classes = [ string_to_class( jump ) for jump in jumps ]
     directions = strafes_to_directions( strafes )
 
     dummyVMF = new_vmf()
     coord = ( 0 , 0 )
 
+    textures = Textures().load_textures()
     start, end, connectors, triggers = Start(), End(), Connectors(), Triggers()
-    dummyVMF = addVMF( dummyVMF, start.create( cur ) )
+    dummyVMF = addVMF( dummyVMF, start.create( cur, textures ) )
     for i in range( len( directions ) ):
         jump, dir = jumps_as_classes[i], directions[i]
-        jump_vmf, coord = jump.create( dir, coord )
+        jump_vmf, coord = jump.create( dir, coord, textures  )
         dummyVMF = addVMF( dummyVMF, jump_vmf )
-    dummyVMF = addVMF( dummyVMF, end.create( dir, coord, next ) )
-    connectors_vmf = connectors.create( strafes, directions )
+    dummyVMF = addVMF( dummyVMF, end.create( dir, coord, next, textures  ) )
+    connectors_vmf = connectors.create( strafes, directions, textures  )
     dummyVMF = addVMF( dummyVMF, connectors_vmf )
-    dummyVMF = addVMF( dummyVMF, triggers.create( connectors_vmf ) )
+    dummyVMF = addVMF( dummyVMF, triggers.create( connectors_vmf, textures ) )
 
     os.makedirs( dirname, exist_ok=True)
     filename = os.path.join( dirname, mapname, f'jump_{cur+1}.vmf' )
