@@ -5,17 +5,25 @@ dirname = './vmfs'
 mapname = 'testing'
 map_list = [
     Jump(
-        [ 'wl', 'rs', 'wr', 'jl' ],
-        ['-', '-', 'r', '-' ],
+        [ '4-wr', 'wr', 'wl', 'wl' ],
+        ['-', '-', 'l', 'r' ],
     ),
     Jump(
-        [ 'wr', 'jr', 'wr', 'rs', 'wr' ],
-        ['-', 'r', '-',  'r', '-' ],
+        [ '2-wr', 'wr', 'wl', 'wl' ],
+        ['-', 'l', 'r', 'r' ],
     ),
-    Jump(
-        [ 'ss', 'sk', 'wr', 'rs', 'wr' ],
-        ['-', '-', '-',  'r', '-' ],
-    ),
+    # Jump(
+    #     [ 'wr', 'rs', 'wl', 'jr' ],
+    #     ['-', '-', 'r', '-' ],
+    # ),
+    # Jump(
+    #     [ 'wl', 'jl', 'wl', 'rs', 'wl' ],
+    #     ['-', 'r', '-',  'r', '-' ],
+    # ),
+    # Jump(
+    #     [ 'ss', 'sk', 'wl', 'rs', 'wl' ],
+    #     ['-', '-', '-',  'r', '-' ],
+    # ),
 ]
 
 multiple_jump_generator( map_list, mapname, dirname )

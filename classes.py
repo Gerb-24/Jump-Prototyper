@@ -210,33 +210,88 @@ class VerticesToManipulate:
 
 ''' Classes for generate.py '''
 
-class Platform:
-    def  __init__( self, type ):
-        self.type = type # ss or sk or rs
-    def create( self, dir, coord, textures ):
+class AbstractBrush:
+    def __init__( self, move_dic, mat_dic ):
+        self.move_dic = move_dic
+        self.mat_dic = mat_dic
+
+    def create( self, coord, textures, combined = None ):
         proto = createDuplicateVMF(prototypeVMF)
         verts = BrushVertexManipulationBox( proto ).createVerticesInBoxDict().moveToZero()
-        verts.translate( *coord, 0 )
-        dir_r, dir_l, dir_opp = direction_dict[ dir ][ 'l' ], direction_dict[ dir ][ 'r' ], direction_dict[ dir ][ 'o' ]
+        verts.translate( *coord )
+        verts.move_to_dic( self.move_dic )
+        textures.mat_to_dic( proto, self.mat_dic )
+
+        if combined:
+            for vertex in verts.verticesDict[ combined['keys'][ 0 ] ]:
+                if vertex in verts.verticesDict[ combined['keys'][ 1 ] ]:
+                    vertex.move( *verts.getMove( 'z', combined['val'] ))
+
+        return proto
+
+class AbstractSpacer:
+    def __init__( self, l, int_dic, h ):
+        self.l = l
+        self.int_dic = int_dic
+        self.h = h
+
+    def update_coord( self, dir, coord ):
+        move_list = []
+        for key in self.int_dic:
+            move_list.append( getMove( key, self.int_dic[ key ] ) )
+        move_list.append( coord )
+        start = (
+            sum( [ e[0] for e in move_list ] ),
+            sum( [ e[1] for e in move_list ] ),
+            sum( [ e[2] for e in move_list ] ) + self.h,
+        )
+
+        # then we update the coord to the end position
+        b_1, b_2, b_3 = getMove( dir, self.l )
+        end = (start[0] + b_1, start[1] + b_2, start[2] + b_3)
+        return self.l, start, end
+
+
+class Platform:
+    def  __init__( self, type ):
+        self.type = type # ss or sk or rs or d
+        self.start = None
+        self.dir = None
+        self.length = 4*128
+
+    def update_coord( self, dir, coord ):
+        self.dir = dir
+
+        # first we get the starting position
+        a_1, a_2, a_3 = getMove( dir, 4*128 )
+        self.coord = ( coord[0] + a_1, coord[1] + a_2, coord[2] + a_3 )
+
+        # then we update the coord to the end position
+        b_1, b_2, b_3 = getMove( dir, self.length )
+        new_coord = (self.coord[0] + b_1, self.coord[1] + b_2, self.coord[2] + b_3)
+        return new_coord
+
+    def create( self, textures ):
+
+        # get the directions
+        coord, dir = self.coord, self.dir
+        dir_r = direction_dict[ dir ][ 'l' ]
+        dir_l = direction_dict[ dir ][ 'r' ]
+        dir_opp = direction_dict[ dir ][ 'o' ]
+
         move_dic = {
             dir_r:      2*128,
             dir_l:      2*128,
-            dir:        6*128,
-            dir_opp:    -2*128,
+            dir:        4*128,
+            dir_opp:    0,
             'z':        2*128,
             '-z':       2*128
         }
 
-        verts.move_to_dic( move_dic )
-
-        if self.type == 'rs':
-            for vertex in verts.verticesDict[ dir ]:
-                if vertex in verts.verticesDict[ 'z' ]:
-                    vertex.move( *verts.getMove( 'z', 2*128 ))
-
-        c_1, c_2, _ = verts.getMove( dir, 8*128 )
-        coord = ( coord[0]+c_1, coord[1]+c_2 )
-
+        combined = {        # we always want to go in the z direction for now
+            'keys': ( dir, 'z' ),
+            'val': 2*128
+        } if self.type == 'rs' else None
 
         mat_dic = {
             dir_r:      textures.side,
@@ -250,66 +305,179 @@ class Platform:
         else:
             mat_dic[ 'z' ] = textures.skip
 
-        textures.mat_to_dic( proto, mat_dic )
+        proto = AbstractBrush( move_dic, mat_dic ).create( coord, textures, combined )
 
-        return proto, coord
+        # c_1, c_2, _ = getMove( dir, 8*128 )
+        # coord = ( coord[0]+c_1, coord[1]+c_2 )
+
+        return proto
 
 class Wallshot:
-    def  __init__( self, l_or_r ):
+    def  __init__( self, l_or_r, initial=None ):
         self.l_or_r = l_or_r        # left or right
+        self.dir = None
+        self.coord = None
+        self.length = 4*128
+        self.height = 10*128
+        self.initial = initial
 
-    def create( self, dir, coord, textures ):
-        proto = createDuplicateVMF(prototypeVMF)
-        verts = BrushVertexManipulationBox( proto ).createVerticesInBoxDict().moveToZero()
-        verts.translate( *coord, 0 )
-        n = direction_dict[ dir ][ self.l_or_r ]
-        n_opp = direction_dict[ n ][ 'o' ]
+
+    def update_coord( self, cur_dir, prev_dir, prev_l_or_r, strafe, coord, spacing_type ):
+        self.dir = cur_dir
+
+        if self.initial:
+            spacing_type = self.initial
+
+        if spacing_type == '4':
+            self.height = 6*128
+            l, h = 2*128, 4*128
+            if self.initial:
+                int_dic = {
+                    cur_dir:    1*128
+                }
+                spacing = AbstractSpacer( l, int_dic, 0*128 )
+            else:
+                if prev_l_or_r == self.l_or_r:
+                    if strafe == '-':
+                        int_dic = {
+                            cur_dir:    2*128
+                        }
+                    elif strafe == prev_l_or_r:
+                        int_dic = {
+                            cur_dir:    2*128,
+                            prev_dir:   2*128,
+                        }
+                    elif strafe != prev_l_or_r:
+                        int_dic = {
+                            cur_dir:    1*128,
+                            prev_dir:   1*128,
+                        }
+                elif prev_l_or_r != self.l_or_r:
+                    if strafe == '-':
+                        int_dic = {
+                            cur_dir:    2*128
+                        }
+                    elif strafe == prev_l_or_r:
+                        int_dic = {
+                            cur_dir:    1*128,
+                            prev_dir:   1*128,
+                        }
+                    elif strafe != prev_l_or_r:
+                        int_dic = {
+                            cur_dir:    1*128,
+                            prev_dir:   1*128,
+                        }
+
+                spacing = AbstractSpacer( l, int_dic, h )
+
+        elif spacing_type == '2':
+            self.height = 4*128
+            l, h = 3*128, 2*128
+            if self.initial:
+                int_dic = {
+                    cur_dir:    2*128
+                }
+                spacing = AbstractSpacer( l, int_dic, 0*128 )
+            else:
+                if prev_l_or_r == self.l_or_r:
+                    if strafe == '-':
+                        int_dic = {
+                            cur_dir:    3*128
+                        }
+                    elif strafe == prev_l_or_r:
+                        int_dic = {
+                            cur_dir:    3*128,
+                            prev_dir:   3*128,
+                        }
+                    elif strafe != prev_l_or_r:
+                        int_dic = {
+                            cur_dir:    2*128,
+                            prev_dir:   2*128,
+                        }
+                elif prev_l_or_r != self.l_or_r:
+                    if strafe == '-':
+                        int_dic = {
+                            cur_dir:    3*128
+                        }
+                    elif strafe == prev_l_or_r:
+                        int_dic = {
+                            cur_dir:    2*128,
+                            prev_dir:   2*128,
+                        }
+                    elif strafe != prev_l_or_r:
+                        int_dic = {
+                            cur_dir:    2*128,
+                            prev_dir:   2*128,
+                        }
+
+                spacing = AbstractSpacer( l, int_dic, h )
+        else:
+            print(f'Something went wrong with the spacing_type lol')
+        self.length, self.coord, coord = spacing.update_coord( cur_dir, coord )
+
+        return coord, spacing_type
+
+    def create( self, textures ):
+        dir = self.dir
+        coord = self.coord
+        length = self.length
+        # get the directions
+        n_opp = direction_dict[ dir ][ self.l_or_r ]
+        n = direction_dict[ n_opp ][ 'o' ]
         dir_opp = direction_dict[ dir ][ 'o' ]
 
         move_dic = {
             n: -1*128,
-            n_opp: 3*128,
-            dir: 6*128,
-            dir_opp: -2*128,
-            'z': 10*128,
-            '-z': 2*128
+            n_opp: 2*128,
+            dir: length,
+            dir_opp: 0,
+            'z': self.height,
+            '-z': 0*128
         }
-        verts.move_to_dic( move_dic )
-
-        c_1, c_2, _ = verts.getMove( dir, 8*128 )
-        coord = ( coord[0]+c_1, coord[1]+c_2 )
 
         mat_dic = {
             n:          textures.shoot,
             dir:        textures.side,
             dir_opp:    textures.side,
+            'z':        textures.side,
         }
 
-        textures.mat_to_dic( proto, mat_dic )
+        proto = AbstractBrush( move_dic, mat_dic ).create( coord, textures )
 
-        return proto, coord
+        return proto
 
 class Jurf:
     def  __init__( self, l_or_r ):
         self.l_or_r = l_or_r        # left or right
-    def create( self, dir, coord, textures ):
-        proto = createDuplicateVMF(prototypeVMF)
-        verts = BrushVertexManipulationBox( proto ).createVerticesInBoxDict().moveToZero()
-        verts.translate( *coord, 0 )
+        self.dir = None
+        self.coord = None
+        self.length = 4*128
 
-        proto2 = createDuplicateVMF(prototypeVMF)
-        verts2 = BrushVertexManipulationBox( proto2 ).createVerticesInBoxDict().moveToZero()
-        verts2.translate( *coord, 0 )
+    def update_coord( self, dir, coord ):
+        self.dir = dir
 
-        n = direction_dict[ dir ][ self.l_or_r ]
-        n_opp = direction_dict[ n ][ 'o' ]
+        # first we get the starting position
+        a_1, a_2, a_3 = getMove( dir, 4*128 )
+        self.coord = ( coord[0] + a_1, coord[1] + a_2, coord[2] + a_3 )
+
+        # then we update the coord to the end position
+        b_1, b_2, b_3 = getMove( dir, self.length )
+        new_coord = (self.coord[0] + b_1, self.coord[1] + b_2, self.coord[2] + b_3)
+        return new_coord
+
+    def create( self, textures ):
+        dir = self.dir
+        coord = self.coord
+        # get the directions
+        n_opp = direction_dict[ dir ][ self.l_or_r ]
+        n = direction_dict[ n_opp ][ 'o' ]
         dir_opp = direction_dict[ dir ][ 'o' ]
 
         move_dic = {
             n: 128,
             n_opp: 2*128,
-            dir: 6*128,
-            dir_opp: -2*128,
+            dir: 4*128,
+            dir_opp: 0,
             'z': 2*128,
             '-z': 2*128
         }
@@ -317,21 +485,16 @@ class Jurf:
         move_dic2 = {
             n: -2*128,
             n_opp: 3*128,
-            dir: 6*128,
-            dir_opp: -2*128,
+            dir: 4*128,
+            dir_opp: 0,
             'z': 5*128+8,
             '-z': 2*128
         }
 
-        verts.move_to_dic( move_dic )
-        verts2.move_to_dic( move_dic2 )
-
-        for vertex in verts.verticesDict[ n_opp ]:
-            if vertex in verts.verticesDict[ 'z' ]:
-                vertex.move( *verts.getMove( 'z', 3*128+8 ))
-
-        c_1, c_2, _ = verts.getMove( dir, 8*128 )
-        coord = ( coord[0]+c_1, coord[1]+c_2 )
+        combined = {
+            'keys': ( n_opp, 'z' ),
+            'val': 3*128+8
+        }
 
         mat_dic = {
             'z':        textures.walk,
@@ -340,20 +503,22 @@ class Jurf:
             n:          textures.side,
         }
 
-        textures.mat_to_dic( proto, mat_dic )
-
         mat_dic2 = {
             'z':        textures.skip,
             dir:        textures.side,
             dir_opp:    textures.side,
         }
 
-        textures.mat_to_dic( proto2, mat_dic2 )
+        proto = AbstractBrush( move_dic, mat_dic ).create( coord, textures, combined )
+        proto2 = AbstractBrush( move_dic2, mat_dic2 ).create( coord, textures )
 
 
         proto = addVMF( proto, proto2 )
 
-        return proto, coord
+        c_1, c_2, _ = getMove( dir, 8*128 )
+        coord = ( coord[0]+c_1, coord[1]+c_2 )
+
+        return proto
 
 class Start:
     def create( self, cur, textures ):
@@ -393,11 +558,11 @@ class Start:
 
 class End:
     def create( self, dir, coord, next, textures ):
-        def create_plat():
-            proto = createDuplicateVMF(prototypeVMF)
-            verts = BrushVertexManipulationBox( proto ).createVerticesInBoxDict().moveToZero()
-            verts.translate( *coord, 0 )
-            dir_r, dir_l, dir_opp = direction_dict[ dir ][ 'l' ], direction_dict[ dir ][ 'r' ], direction_dict[ dir ][ 'o' ]
+        def create_plat( ):
+
+            dir_r = direction_dict[ dir ][ 'r' ]
+            dir_l = direction_dict[ dir ][ 'l' ]
+            dir_opp = direction_dict[ dir ][ 'o' ]
             move_dic = {
                 dir_r:      3*128,
                 dir_l:      3*128,
@@ -407,21 +572,20 @@ class End:
                 '-z':       2*128,
             }
 
-            verts.move_to_dic( move_dic )
-
             mat_dic = {
                 'z':        textures.walk,
                 dir_opp:    textures.side
             }
-            textures.mat_to_dic( proto, mat_dic )
+
+            proto = AbstractBrush( move_dic, mat_dic ).create( coord, textures )
 
             return proto
 
         def create_tele_door():
-            proto = createDuplicateVMF(prototypeVMF)
-            verts = BrushVertexManipulationBox( proto ).createVerticesInBoxDict().moveToZero()
-            verts.translate( *coord, 0 )
-            dir_r, dir_l, dir_opp = direction_dict[ dir ][ 'l' ], direction_dict[ dir ][ 'r' ], direction_dict[ dir ][ 'o' ]
+
+            dir_r = direction_dict[ dir ][ 'r' ]
+            dir_l = direction_dict[ dir ][ 'l' ]
+            dir_opp = direction_dict[ dir ][ 'o' ]
             move_dic = {
                 dir_r:     0.5*128,
                 dir_l:      0.5*128,
@@ -430,22 +594,22 @@ class End:
                 'z':        1.5*128,
                 '-z':       0,
             }
-            verts.move_to_dic( move_dic )
 
-            solid = proto.get_solids()[0]
-            for side in solid.get_sides():
-                if side.material in textures.to_sides( dir, '-z' ):
-                    side.material = textures.nodraw
-                else:
-                    side.material = textures.black
+            mat_dic = {
+                'z':        textures.black,
+                dir_opp:    textures.black,
+                dir_l:      textures.black,
+                dir_r:      textures.black
+            }
 
+            proto = AbstractBrush( move_dic, mat_dic ).create( coord, textures )
 
             return proto
 
         def create_tele():
             proto = createDuplicateVMF(prototypeVMF)
             verts = BrushVertexManipulationBox( proto ).createVerticesInBoxDict().moveToZero()
-            verts.translate( *coord, 0 )
+            verts.translate( *coord )
             dir_r, dir_l, dir_opp = direction_dict[ dir ][ 'l' ], direction_dict[ dir ][ 'r' ], direction_dict[ dir ][ 'o' ]
             move_dic = {
                 dir_r:     0.5*128+8,
@@ -473,87 +637,17 @@ class End:
             return proto
 
         tot_proto = new_vmf()
-        tot_proto = addVMF( tot_proto, create_plat() )
+        tot_proto = addVMF( tot_proto, create_plat( ) )
         tot_proto = addVMF( tot_proto, create_tele_door() )
         tot_proto = addVMF( tot_proto, create_tele() )
 
         return tot_proto
 
-class Connectors:
-    def create( self, strafes, directions, textures ):
-        coord = ( 0, 0 )
-        proto_list = []
-        verts_list = []
-        for i in range(len( strafes )):
-
-            if i == 0 or strafes[i] != '-':
-                dir = directions[i]
-                proto = createDuplicateVMF(prototypeVMF)
-                verts = BrushVertexManipulationBox( proto ).createVerticesInBoxDict().moveToZero()
-                verts.translate( *coord, 0 )
-                dir_r, dir_l, dir_opp = direction_dict[ dir ][ 'l' ], direction_dict[ dir ][ 'r' ], direction_dict[ dir ][ 'o' ]
-                for vertex in verts.verticesDict[ dir_r ]:
-                    vertex.move( *verts.getMove( dir_r, 3*128 ))
-                for vertex in verts.verticesDict[ dir_l ]:
-                    vertex.move( *verts.getMove( dir_l, 3*128 ))
-
-                for vertex in verts.verticesDict[ dir ]:
-                    vertex.move( *verts.getMove( dir, 8*128 ))
-
-                if i == 0:
-                    for vertex in verts.verticesDict[ dir_opp ]:
-                        vertex.move( *verts.getMove( dir_opp, 4*128 ))
-
-                for vertex in verts.verticesDict[ 'z' ]:
-                    vertex.move( *verts.getMove( 'z', 10*128))
-                for vertex in verts.verticesDict[ '-z' ]:
-                    vertex.move( *verts.getMove( '-z', 2*128 ))
-
-                solid = proto.get_solids()[0]
-                for side in solid.get_sides():
-                    side.material = textures.search
-                proto_list.append( proto )
-                verts_list.append( verts )
-
-                c_1, c_2, _ = verts.getMove( dir, 8*128 )
-                coord = ( coord[0]+c_1, coord[1]+c_2 )
-
-            elif strafes[i] == '-':
-                verts = verts_list[-1]
-                dir = directions[i]
-                for vertex in verts.verticesDict[ dir ]:
-                    vertex.move( *verts.getMove( dir, 8*128 ))
-                c_1, c_2, _ = verts.getMove( dir, 8*128 )
-                coord = ( coord[0]+c_1, coord[1]+c_2 )
-
-            if i == len(strafes)-1:
-                verts = verts_list[-1]
-                dir = directions[i]
-                for vertex in verts.verticesDict[ dir ]:
-                    vertex.move( *verts.getMove( dir, 26*128 ))
-
-            if i!= 0 and strafes[i] != '-':
-                cur_verts, prev_verts = verts_list[-1], verts_list[-2]
-                cur_dir, prev_dir = directions[i], directions[i-1]
-                cur_dir_opp = direction_dict[ cur_dir ][ 'o' ]
-
-                for vertex in prev_verts.verticesDict[ prev_dir ]:
-                    vertex.move( *verts.getMove( prev_dir, 3*128 ))
-                for vertex in cur_verts.verticesDict[ cur_dir_opp ]:
-                    vertex.move( *verts.getMove( cur_dir_opp, -3*128 ))
-
-
-
-        tot_proto = new_vmf()
-        for proto in proto_list:
-            tot_proto = addVMF( tot_proto, proto )
-        return tot_proto
-
 class Triggers:
-    def create( self, vmf, textures ):
-        solids = vmf.get_solids()
-        xMin, xMax, yMin, yMax, zMin, zMax = getMaxDimensionsOfList( solids )
-
+    def create( self, solids, textures ):
+        dim_tuple = getMaxDimensionsOfList(solids)
+        xMin, xMax, yMin, yMax, zMin, zMax = dim_tuple
+        o_xMin, o_xMax, o_yMin, o_yMax, o_zMin, o_zMax = getDimensionsOfSolid( solids[0] )
         proto = createDuplicateVMF(prototypeVMF)
         verts = BrushVertexManipulationBox( proto ).createVerticesInBoxDict().moveToZero()
         verts.full_move( xMax, yMax, zMax, xMin, yMin, zMin )
@@ -571,6 +665,7 @@ class Triggers:
         regen_ent.solids.append( solid )
 
         hurt_dic = {
+            'origin':       f'{ (o_xMax + o_xMin)//2 } { (o_yMax + o_yMin)//2 } {(o_zMax + o_zMin)//2}',
             'classname':    'trigger_hurt',
             'damage':       '-9999999'
         }
@@ -581,7 +676,7 @@ class Triggers:
         proto = new_vmf()
         proto.add_entities(*[regen_ent, hurt_ent])
 
-        return proto
+        return proto, dim_tuple
 
 ''' Classes for main.py '''
 
@@ -644,7 +739,20 @@ def moveVMF( vmf: VMF, coord ):
     solids = vmf.get_solids( include_solid_entities=True )
     for solid in solids:
         solid.move( *coord )
-    entities = vmf.get_entities( include_solid_entities=False )
+    entities = vmf.get_entities( include_solid_entities=True )
     for entity in entities:
-        origin = entity.other["origin"]
-        entity.other["origin"] = Vertex( origin.x + coord[0], origin.y + coord[1], origin.z + coord[2] )
+        if "origin" in entity.other:
+            print( entity.classname )
+            origin = entity.other["origin"]
+            entity.other["origin"] = Vertex( origin.x + coord[0], origin.y + coord[1], origin.z + coord[2] )
+
+def getMove( direction, value ):
+    moveDict = {
+    'x': (value, 0, 0),
+    'y': (0, value, 0),
+    'z': (0, 0, value),
+    '-x': (-value, 0, 0),
+    '-y': (0, -value, 0),
+    '-z': (0, 0, -value),
+    }
+    return moveDict[ direction ]

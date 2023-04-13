@@ -4,7 +4,15 @@ import json
 import os
 
 def string_to_class( s ):
-    if s == 'wr':
+    if s == '4-wr':
+        return Wallshot( 'r', initial='4' )
+    elif s == '4-wl':
+        return Wallshot( 'l', initial='4' )
+    elif s == '2-wr':
+        return Wallshot( 'r', initial='2' )
+    elif s == '2-wl':
+        return Wallshot( 'l', initial='2' )
+    elif s == 'wr':
         return Wallshot( 'r' )
     elif s == 'wl':
         return Wallshot( 'l' )
@@ -33,19 +41,28 @@ def jump_generator( jumps, strafes, mapname, dirname, cur, next ):
     directions = strafes_to_directions( strafes )
 
     dummyVMF = new_vmf()
-    coord = ( 0 , 0 )
+    coord = ( 0, 0, 0 )
 
     textures = Textures().load_textures()
-    start, end, connectors, triggers = Start(), End(), Connectors(), Triggers()
+    start, end = Start(), End()
     dummyVMF = addVMF( dummyVMF, start.create( cur, textures ) )
+
+    # first get all the coordinates
+    spacing_type = ''
     for i in range( len( directions ) ):
-        jump, dir = jumps_as_classes[i], directions[i]
-        jump_vmf, coord = jump.create( dir, coord, textures  )
+        jump, cur_dir, strafe = jumps_as_classes[i], directions[i], strafes[i]
+        prev_dir = directions[i-1] if i != 0 else cur_dir
+        prev_jump = jumps_as_classes[i-1] if i!= 0 else None
+        prev_l_or_r = prev_jump.l_or_r if prev_jump else None
+        if type(jump).__name__ in { 'Wallshot', 'Jurf' }:
+            coord, spacing_type = jump.update_coord( cur_dir, prev_dir, prev_l_or_r, strafe, coord, spacing_type )
+    # create the jump elements
+    for jump in jumps_as_classes:
+        jump_vmf = jump.create( textures  )
         dummyVMF = addVMF( dummyVMF, jump_vmf )
-    dummyVMF = addVMF( dummyVMF, end.create( dir, coord, next, textures  ) )
-    connectors_vmf = connectors.create( strafes, directions, textures  )
-    dummyVMF = addVMF( dummyVMF, connectors_vmf )
-    dummyVMF = addVMF( dummyVMF, triggers.create( connectors_vmf, textures ) )
+    dummyVMF = addVMF( dummyVMF, end.create( cur_dir, coord, next, textures  ) )
+    # connectors_vmf = connectors.create( strafes, directions, textures  )
+    # dummyVMF = addVMF( dummyVMF, connectors_vmf )
 
     os.makedirs( dirname, exist_ok=True)
     filename = os.path.join( dirname, mapname, f'jump_{cur+1}.vmf' )
