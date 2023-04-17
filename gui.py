@@ -3,17 +3,184 @@ import math
 
 from gui_build import generate_vmf
 
-from PyQt5.QtCore import Qt, QRectF, QPointF, QLine
-from PyQt5.QtGui import QBrush, QPainterPath, QPainter, QColor, QPen, QPixmap
-from PyQt5.QtWidgets import QGraphicsRectItem, QApplication, QGraphicsView, QGraphicsScene, QGraphicsItem
+from PyQt5.QtCore import Qt, QRectF, QPointF, QLine, QSize
+
+from PyQt5.QtGui import (
+    QBrush, 
+    QPainterPath, 
+    QPainter, 
+    QColor, 
+    QPen, 
+    QFont, 
+    QIcon)
+''' importing main widgets '''
+from PyQt5.QtWidgets import (
+    QGroupBox,
+    QLineEdit,
+    QLayout,
+    QHBoxLayout,
+    QVBoxLayout,
+    QPushButton,
+    QLabel,
+    QAbstractItemView,
+    QStackedWidget,
+    QListWidget,
+    QListWidgetItem,
+    QWidget,
+    QApplication)
+''' importing graphics widgets '''
+from PyQt5.QtWidgets import (
+    QGraphicsView,
+    QGraphicsScene,
+    QGraphicsItem,
+    QGraphicsRectItem, 
+)
+
+font = QFont( 'Lato Light', 9 )
+widget_height = 38
+length_1, length_2 = 200, 80
+
+def create_line_edit(l, h, text=''):
+    line_edit = QLineEdit(text)
+    line_edit.setFixedSize(l,h)
+    line_edit.setFont( font )
+    line_edit.setAlignment( Qt.AlignmentFlag.AlignCenter )
+    return line_edit
+
+def create_button(l, h, text):
+    button = QPushButton(text)
+    button.setFixedSize(l,h)
+    button.setFont( font )
+    return button
+
+def create_v_layout(item_list, parent=None):
+    layout = QVBoxLayout( parent ) if parent else QVBoxLayout()
+    layout.setContentsMargins(0,0,0,0)
+    layout.setAlignment(Qt.AlignTop)
+
+    layout.setSpacing(10)
+    for item in item_list:
+        if issubclass( item.__class__, QWidget ):
+            layout.addWidget( item )
+        elif issubclass( item.__class__, QLayout ):
+            layout.addLayout( item )
+    return layout
+
+def create_h_layout(item_list, parent=None):
+    layout = QHBoxLayout( parent ) if parent else QHBoxLayout()
+    layout.setContentsMargins(0,0,0,0)
+    layout.setAlignment(Qt.AlignLeft)
+
+    layout.setSpacing(10)
+    for item in item_list:
+        if issubclass( item.__class__, QWidget ):
+            layout.addWidget( item )
+        elif issubclass( item.__class__, QLayout ):
+            layout.addLayout( item )
+    return layout
+
+class ViewMenu(QWidget):
+    def __init__(self, window, parent=None):
+        super().__init__(parent)
+        ''' Add the Form '''
+        self.window = window
+        self.lineedit = create_line_edit(length_1, widget_height)
+        self.button = create_button(length_2, widget_height,'Add')
+
+        self.form_layout = create_h_layout( [self.lineedit, self.button] )
+        self.layout = create_v_layout( [ self.form_layout ], parent=self )
+
+        self.button.clicked.connect( self.add_view_and_item )
+
+    def add_view_and_item( self ):
+        def add_view():
+            scene = GridScene()
+            view = GraphicsView(scene, self.window)
+            view.fitInView(scene.sceneRect(), Qt.KeepAspectRatio)
+            # self.window.graphicsViews.append( view )
+            self.window.stackedWidget.addWidget( view )
+            return view
+        
+        def add_item(view):
+            text = self.lineedit.text()
+            self.lineedit.setText('')
+            item = ViewMenuItem(text)
+            item.button.clicked.connect(lambda _, v=view: self.change_view(v))
+            item.remove_button.clicked.connect(lambda _, i=item, v=view: self.remove_view_and_item(i, v))
+            self.layout.addWidget(item)
+            return item
+
+        view = add_view()
+        add_item(view)
+
+    def remove_view_and_item( self, item, view ):
+        def remove_view(view):
+            self.window.stackedWidget.removeWidget( view )
+
+        def remove_item(item):
+            self.layout.removeWidget(item)
+            item.deleteLater()
+        
+        remove_view(view)
+        remove_item(item)
+
+    def change_view( self, view ):
+        self.window.stackedWidget.setCurrentWidget(view)
+        view.setFocus()
+
+class ViewMenuItem(QWidget):
+    def __init__(self, text, parent=None):
+        super().__init__(parent)
+
+        self.button = create_button( length_1, widget_height, text )
+
+
+        self.remove_button = create_button( length_2, widget_height, 'Remove' )
+        self.remove_button.setStyleSheet( open('gui/cssfiles/removestyle.css').read() )
+
+        self.layout = create_h_layout([self.button, self.remove_button], parent=self)
+
+class JumpItemMenu(QWidget):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.lineedit = create_line_edit( length_1, widget_height )
+        self.layout = create_v_layout( [self.lineedit] ,parent=self )
+
+    def update(self, item):
+        self.lineedit.setText(str(item.z_max_rel))
+
+class MyWindow(QWidget):
+    def __init__(self):
+        super().__init__()
+        self.font = QFont( 'Lato Light', 8 )
+        self.setWindowTitle("Jump Prototyper")
+        self.setWindowIcon(QIcon('gui/ui_images/appicon.ico'))
+        self.setGeometry( 0,0,1000,800 )
+
+        ''' These handle the views '''
+        self.stackedWidget = QStackedWidget()
+        self.viewmenu = ViewMenu( self )
+        self.jump_item_menu = JumpItemMenu()
+        window_items = [
+            self.viewmenu,
+            self.stackedWidget,
+            self.jump_item_menu,
+        ]
+        self.layout = create_h_layout( window_items, parent=self )
 
 class JumpItem():
-    def __init__(self, num, dims ) -> None:
+    def __init__(self, num, dims, prev ) -> None:
+        self.prev = prev
         self.num = num
+        self.z_max_rel = 1
         self.dir = 0
         self.dims = dims # x-start, y-start, x-diff, y-diff
     def update_dims( self, dims ):
         self.dims = dims
+    def get_z_max( self ):
+        if not self.prev:
+            return self.z_max_rel
+        return self.prev.get_z_max() + self.z_max_rel
 
 class GraphicsRectItem(QGraphicsRectItem):
     handleTopLeft = 1
@@ -25,8 +192,8 @@ class GraphicsRectItem(QGraphicsRectItem):
     handleBottomMiddle = 7
     handleBottomRight = 8
 
-    handleSize = +8.0
-    handleSpace = -4.0
+    handleSize = +10.0
+    handleSpace = -5.0
 
     handleCursors = {
         handleTopLeft: Qt.SizeFDiagCursor,
@@ -39,16 +206,19 @@ class GraphicsRectItem(QGraphicsRectItem):
         handleBottomRight: Qt.SizeFDiagCursor,
     }
 
-    def __init__(self, color, jump_item, *args):
+    def __init__(self, view, color, jump_item, *args):
         """
         Initialize the shape.
         """
         super().__init__(*args)
         
+        self.view = view
         self.gridSize = 32
         self.color = color
         self.jump_item = jump_item
         self.dir = 0
+        self.status = 0
+        self.z_max = 1
         
         self.direction_circles = {}
         self.handles = {}
@@ -93,6 +263,7 @@ class GraphicsRectItem(QGraphicsRectItem):
         """
         Executed when the mouse is pressed on the item.
         """
+        self.view.window.jump_item_menu.update( self.jump_item )
         self.handleSelected = self.handleAt(mouseEvent.pos())
         if self.handleSelected:
             self.mousePressPos = mouseEvent.pos()
@@ -323,7 +494,7 @@ class GraphicsRectItem(QGraphicsRectItem):
         """
         Paint the direction circle in the graphic view.
         """
-        if self.handleSelected is None:
+        if self.handleSelected is None and self.status == 0:
             painter.setRenderHint(QPainter.Antialiasing)
             painter.setBrush(QBrush(QColor(255, 255, 255, 255)))
             painter.setPen(QPen(QColor(0, 0, 0, 255), 1.0, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
@@ -334,9 +505,23 @@ class GraphicsRectItem(QGraphicsRectItem):
             painter.setPen(QPen(QColor(0, 0, 0, 255), 1.0, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
             painter.drawRect(self.direction_circles['dir'])
 
+        if self.handleSelected is None and self.status == 1:
+            painter.setRenderHint(QPainter.Antialiasing)
+            painter.setBrush(QBrush(QColor(255, 255, 255, 255)))
+            painter.setPen(QPen(QColor(0, 0, 0, 255), 1.0, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
+            painter.drawRect(self.direction_circles['mid'])
+
+            painter.setRenderHint(QPainter.Antialiasing)
+            painter.setFont(QFont('Lato Light', 10))
+            painter.drawText( 
+                int(self.rect().center().x()-5),
+                int(self.rect().center().y()+5),
+                str(self.z_max) )
+
 class GridScene(QGraphicsScene):
     def __init__(self):
         super().__init__()
+        self.setSceneRect( 0, 0, 640, 640 )
         self.gridSize = 32
 
         """
@@ -379,11 +564,14 @@ class GridScene(QGraphicsScene):
         painter.drawLines( *lines_y )
 
 class GraphicsView(QGraphicsView):
-    def __init__(self, scene):
+    def __init__(self, scene, window):
         super().__init__()
+        self.window = window
         self.scene = scene
+        self.cur = None
         self.setScene(scene)
         self.jump_items = []
+
 
     def keyPressEvent(self, event):
         dims = (0, 0, 32*2, 32*2)
@@ -400,13 +588,18 @@ class GraphicsView(QGraphicsView):
             }
             num = key_to_num[ event.key() ]
             color = num_to_color[ num ]
-            jump_item = JumpItem( num, dims )
+            jump_item = JumpItem( num, dims, self.cur )
+            self.cur = jump_item
             self.jump_items.append( jump_item )
-            self.scene.addItem(GraphicsRectItem(color, jump_item, *dims))
+            self.scene.addItem(GraphicsRectItem( self, color, jump_item, *dims))
         
         elif event.key() == Qt.Key_Space:
             generate_vmf(self.jump_items)
             print('COMPILED')
+        elif event.key() == Qt.Key_Z:
+            for item in self.scene.items():
+                item.status = ( item.status + 1 ) % 2
+                item.update()
         elif event.key() == Qt.Key_D:
             items = self.scene.selectedItems()
             for item in items:
@@ -414,25 +607,30 @@ class GraphicsView(QGraphicsView):
                 item.dir = (item.dir + 1) % 4
                 item.updateDirectionPos()
                 item.update()
+        elif event.key() in { Qt.Key_A, Qt.Key_S }:
+            for item in self.scene.selectedItems():
+                if item.status == 1:
+                    key_to_add = {
+                        Qt.Key_A:   1,
+                        Qt.Key_S:   -1,
+                    }
+                    item.jump_item.z_max_rel = item.jump_item.z_max_rel + key_to_add[ event.key() ]
+                    item.z_max = item.z_max + key_to_add[ event.key() ]
+                    item.update()
+                    self.window.jump_item_menu.update( item.jump_item )
         else:
             super().keyPressEvent(event)
 
 
-def main():
-
+if __name__ == '__main__':
     app = QApplication(sys.argv)
 
-    
-    scene = GridScene()
-    scene.setSceneRect(0, 0, 640, 640)
+    app.setStyleSheet(open('gui/cssfiles/stylesheet.css').read())
 
-    grview = GraphicsView(scene)
-
-    grview.fitInView(scene.sceneRect(), Qt.KeepAspectRatio)
-    grview.show()
-    sys.exit(app.exec_())
-
-
-if __name__ == '__main__':
-    main()
+    window = MyWindow()
+    window.show()
+    try:
+        sys.exit(app.exec())
+    except SystemExit:
+        print(' Closing Window ... ')
            
