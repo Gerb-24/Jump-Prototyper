@@ -79,6 +79,46 @@ def create_h_layout(item_list, parent=None):
             layout.addLayout( item )
     return layout
 
+class RadioButtonGroup(QWidget):
+    def __init__(self, names, parent=None):
+        super().__init__(parent)
+        self.buttons = [ create_button( 80,38,name) for name in names ]
+        self.layout = create_h_layout( self.buttons, parent=self )
+
+    def connect( self, func, cur_item ):
+        ''' We need to disconnect all of our buttons first '''
+        for b in self.buttons:
+            try: b.clicked.disconnect() 
+            except Exception: pass
+        ''' The stylesheets for handling our radiobuttons '''
+        off_style = '''
+        QPushButton {
+            background-color: #34495e;
+            border-radius: 5px;
+        }
+        QPushButton::hover {
+            background-color: #7f8c8d;
+            border-radius: 5px;
+        }
+        '''
+        on_style = '''
+        QPushButton {
+            background-color: #f1c40f;
+            border-radius: 5px;
+            color: #34495e;
+        }
+        '''
+        def call_and_set_style( cur ):
+            func( cur )
+            for i,b in enumerate(self.buttons):
+                stylesheet = on_style if i == cur else off_style
+                b.setStyleSheet( stylesheet )
+        
+        for i,b in enumerate(self.buttons):
+            b.clicked.connect(lambda _, index=i: call_and_set_style(index))
+            stylesheet = on_style if i == cur_item else off_style
+            b.setStyleSheet( stylesheet )
+
 class ViewMenu(QWidget):
     def __init__(self, window, parent=None):
         super().__init__(parent)
@@ -143,11 +183,15 @@ class ViewMenuItem(QWidget):
 class JumpItemMenu(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.lineedit = create_line_edit( length_1, widget_height )
-        self.layout = create_v_layout( [self.lineedit] ,parent=self )
+        self.z_rel_lineedit = create_line_edit( length_1, widget_height )
+        self.type_radio_buttons = RadioButtonGroup( ['Platform', 'Skip', 'Wallshot', 'Jurf'] )
+        self.ramp_radio_buttons = RadioButtonGroup( [ 'flat', '1/2', '2/3', '2/1' ] )
+        self.layout = create_v_layout( [self.type_radio_buttons, self.z_rel_lineedit, self.ramp_radio_buttons] ,parent=self )
 
     def update(self, item):
-        self.lineedit.setText(str(item.z_max_rel))
+        self.z_rel_lineedit.setText(str(item.z_max_rel))
+        self.type_radio_buttons.connect( item.set_type, item.type )
+        self.ramp_radio_buttons.connect( item.set_ramp, item.ramp )
 
 class MyWindow(QWidget):
     def __init__(self):
@@ -171,12 +215,21 @@ class MyWindow(QWidget):
 class JumpItem():
     def __init__(self, num, dims, prev ) -> None:
         self.prev = prev
-        self.num = num
+        self.type = num 
         self.z_max_rel = 1
-        self.dir = 0
+        self.dir, self.normal = 0, 1
         self.dims = dims # x-start, y-start, x-diff, y-diff
+        self.ramp = 0 # 0: flat, 1: 1/2
+
+    def set_type(self, type_index):
+        self.type = type_index
+
+    def set_ramp(self, ramp_index ):
+        self.ramp = ramp_index
+
     def update_dims( self, dims ):
         self.dims = dims
+
     def get_z_max( self ):
         if not self.prev:
             return self.z_max_rel
@@ -577,14 +630,14 @@ class GraphicsView(QGraphicsView):
         dims = (0, 0, 32*2, 32*2)
         if event.key() in { Qt.Key_1, Qt.Key_2, Qt.Key_3 }:
             key_to_num = {
-                Qt.Key_1:   1,
-                Qt.Key_2:   2,
-                Qt.Key_3:   3,
+                Qt.Key_1:   0,
+                Qt.Key_2:   1,
+                Qt.Key_3:   2,
             }
             num_to_color = {
-                1:  QColor(255, 0, 0, 100),
-                2:  QColor(0, 255, 0, 100),
-                3:  QColor(0, 0, 255, 100)
+                0:  QColor(255, 0, 0, 100),
+                1:  QColor(0, 255, 0, 100),
+                2:  QColor(0, 0, 255, 100)
             }
             num = key_to_num[ event.key() ]
             color = num_to_color[ num ]
