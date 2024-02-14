@@ -184,7 +184,7 @@ class JumpItemMenu(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.z_rel_lineedit = create_line_edit( length_1, widget_height )
-        self.type_radio_buttons = RadioButtonGroup( ['Platform', 'Skip', 'Wallshot', 'Jurf'] )
+        self.type_radio_buttons = RadioButtonGroup( ['Wallshot', 'Platform', 'Skip', 'Jurf'] )
         self.ramp_radio_buttons = RadioButtonGroup( [ 'flat', '1/2', '2/3', '2/1' ] )
         self.layout = create_v_layout( [self.type_radio_buttons, self.z_rel_lineedit, self.ramp_radio_buttons] ,parent=self )
 
@@ -215,14 +215,20 @@ class MyWindow(QWidget):
 class JumpItem():
     def __init__(self, num, dims, prev ) -> None:
         self.prev = prev
-        self.type = num 
+        self.type = num
+        self.graphics_item = None
         self.z_max_rel = 1
         self.dir, self.normal = 0, 1
         self.dims = dims # x-start, y-start, x-diff, y-diff
         self.ramp = 0 # 0: flat, 1: 1/2
+    
+    def set_graphics_item(self, item ):
+        self.graphics_item = item
+        return self
 
     def set_type(self, type_index):
         self.type = type_index
+        self.graphics_item.set_color( type_index )
 
     def set_ramp(self, ramp_index ):
         self.ramp = ramp_index
@@ -259,7 +265,7 @@ class GraphicsRectItem(QGraphicsRectItem):
         handleBottomRight: Qt.SizeFDiagCursor,
     }
 
-    def __init__(self, view, color, jump_item, *args):
+    def __init__(self, view, jump_item, *args):
         """
         Initialize the shape.
         """
@@ -267,7 +273,7 @@ class GraphicsRectItem(QGraphicsRectItem):
         
         self.view = view
         self.gridSize = 32
-        self.color = color
+        self.color = None
         self.jump_item = jump_item
         self.dir = 0
         self.status = 0
@@ -285,6 +291,18 @@ class GraphicsRectItem(QGraphicsRectItem):
         self.setFlag(QGraphicsItem.ItemIsFocusable, True)
         self.updateHandlesPos()
         self.updateDirectionPos()
+
+    def set_color(self, num):
+        num_to_color = {
+                        0:  QColor(255, 0, 0, 100),
+                        1:  QColor(0, 255, 0, 100),
+                        2:  QColor(0, 0, 255, 100),
+                        3:  QColor(255, 255, 0, 100),
+                    }
+        color = num_to_color[ num ]
+        self.color = color
+        self.update()
+        return self
 
     def handleAt(self, point):
         """
@@ -634,17 +652,14 @@ class GraphicsView(QGraphicsView):
                 Qt.Key_2:   1,
                 Qt.Key_3:   2,
             }
-            num_to_color = {
-                0:  QColor(255, 0, 0, 100),
-                1:  QColor(0, 255, 0, 100),
-                2:  QColor(0, 0, 255, 100)
-            }
+            
             num = key_to_num[ event.key() ]
-            color = num_to_color[ num ]
             jump_item = JumpItem( num, dims, self.cur )
             self.cur = jump_item
             self.jump_items.append( jump_item )
-            self.scene.addItem(GraphicsRectItem( self, color, jump_item, *dims))
+            graphics_item = GraphicsRectItem( self, jump_item, *dims).set_color( num )
+            self.scene.addItem( graphics_item ) 
+            self.cur.set_graphics_item( graphics_item )
         
         elif event.key() == Qt.Key_Space:
             generate_vmf(self.jump_items)

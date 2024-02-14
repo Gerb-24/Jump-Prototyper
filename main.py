@@ -1,29 +1,13 @@
-from generate import multiple_jump_generator
-from classes import Jump
+from random_gen import CREATE_JUMP
 
-dirname = './vmfs'
-mapname = 'testing'
-map_list = [
-    Jump(
-        [ '4-wr', 'wr', 'wl', 'wl' ],
-        ['-', '-', 'l', 'r' ],
-    ),
-    Jump(
-        [ '2-wr', 'wr', 'wl', 'wl' ],
-        ['-', 'l', 'r', 'r' ],
-    ),
-    # Jump(
-    #     [ 'wr', 'rs', 'wl', 'jr' ],
-    #     ['-', '-', 'r', '-' ],
-    # ),
-    # Jump(
-    #     [ 'wl', 'jl', 'wl', 'rs', 'wl' ],
-    #     ['-', 'r', '-',  'r', '-' ],
-    # ),
-    # Jump(
-    #     [ 'ss', 'sk', 'wl', 'rs', 'wl' ],
-    #     ['-', '-', '-',  'r', '-' ],
-    # ),
-]
+# START VELOCITIES
+CTAP_START = ( 0, 600, 925 )
+WS_START_1 = ( 0, 800, 700 )
 
-multiple_jump_generator( map_list, mapname, dirname )
+# CODE
+start_velocity = CTAP_START
+strafes = [0, 1, 2, 0, 1 ] # here the first entry is a dummy value
+start_ws_type = 'r'
+
+vmf = CREATE_JUMP(start_velocity, strafes, start_ws_type)
+vmf.export( 'vmfs/random/test1.vmf' )
